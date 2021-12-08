@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="cs.css">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/js/bootstrap.bundle.min.js"></script>
+    </head>
+    <nav class="navbar navbar-expand-md navbar-light fixed-top" style="background-color: #EAF4F7;">
+      <div class="container-fluid">
+      <a href="index.htm"><img src="logo.png" alt="Logo" style="width:60px; height: 60px; margin-left: 10px;"></a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="collapsibleNavbar">
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="index.htm"><b>Home&nbsp;</b></a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="dbread.php"><b>Dashboard&nbsp;</b></a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#"><b>About&nbsp;</b></a>
+            </li> 
+            <li class="nav-item">
+              <a class="nav-link" href="mailto:vikrantsingh.ece19@chitkarauniversity.edu.in"><b>Contact me&nbsp;&nbsp;</b></a>
+            </li> 
+          </ul>
+        </div>
+      </div>
+    </nav><br><br><br>
+    <body>
+      <u><h1 style="text-align: center;">Block Diagram Of Project</h1></u><br>
+      <img style="margin-left: 4.5in;" src="block.png" alt="Block Diagram"><br><br><br>
+      <u><h1 style="text-align: center;">Circuit Diagram Of Project</h1></u><br>
+      <img style="width: 12in; margin-left: 2in;" src="Circuit.png" alt="Circuit Diagram"><br><br><br><br>
+        <div style="display: block; margin-left: 3in;">
+          <u><h3>Arduino code(NodeMCU)</h3></u><br>
+            <textarea name="text" cols="100" rows="15">              
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include "EmonLib.h"   // Include Emon Library
+#define VOLT_CAL 261
+#define CURRENT_CAL 0.45
+EnergyMonitor emon1;             // Create an instance
+float Vrms=0;
+float Irms=0;
+float poweru=0;
+float energy = 0;
+unsigned long lastmillis = millis();
+String sendval, sendval2, sendval3, sendval4, postData;
+void setup()
+{  
+    Serial.begin(115200);                          
+    emon1.voltage(A0, VOLT_CAL, 1.7);  // Voltage: input pin, calibration, phase_shift
+    emon1.current(A0, CURRENT_CAL);       // Current: input pin, calibration.
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("NodeMCU", "12345678"); 
+    delay(200);
+    while (WiFi.softAPgetStationNum() !=1)   {      //loop here while no AP is connected to this station
+    Serial.print(".");
+    delay(100);                            
+}
+delay(3000);
+}
+void loop()
+{
+    emon1.calcVI(20, 2000);
+    Vrms=emon1.Vrms;
+    Irms=emon1.Irms;
+    poweru=emon1.apparentPower;
+    Serial.print("Vrms: ");
+    Serial.print(Vrms, 2);
+    Serial.print("V");
+    Serial.print("\tIrms: ");
+    Serial.print(Irms, 4);
+    Serial.print("A");
+    Serial.print("\tPower: ");
+    Serial.print(poweru, 4);
+    Serial.print("W");
+    Serial.print("\tEnergy: ");
+    energy = energy + emon1.apparentPower*(millis()-lastmillis)/3600000000.0;
+    Serial.print(energy, 4);
+    Serial.println("kWh");
+    lastmillis = millis();
+    delay(2000);
+    HTTPClient http;    // http object of clas HTTPClient
+    // Convert to float
+    sendval = float(Vrms);  
+    sendval2 = float(Irms);
+    sendval3 = float(poweru); 
+    sendval4 = float(energy);  
+    postData = "sendval=" + sendval + "&sendval2=" + sendval2 + "&sendval3=" + sendval3 + "&sendval4=" + sendval4;
+    // We can post values to PHP files as  example.com/dbwrite.php?name1=val1&name2=val2
+    // Hence created variable postData and stored our variables in it in desired format
+    // Update Host URL here:-  
+    http.begin("http://192.168.4.2/dbwrite.php");                             // Connect to host where MySQL database is hosted
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");        //Specify content-type header
+    int httpCode = http.POST(postData);   // Send POST request to php file and store server response code in variable named httpCode
+    Serial.println("Values are, sendval = " + sendval + ", sendval2 = "+sendval2 + ", sendval3 = "+sendval3 + " and sendval4 = "+sendval4);
+    // if connection eatablished then do this
+    if (httpCode == 200) { 
+        Serial.println("Values uploaded successfully."); 
+        Serial.println(httpCode); 
+        String webpage = http.getString();    // Get html webpage output and store it in a string
+        Serial.println(webpage + "\n");
+    } 
+    else { 
+    // if failed to connect then return and restart
+        Serial.println(httpCode); 
+        Serial.println("Failed to upload values. \n"); 
+        http.end(); 
+        return; 
+    }
+    delay(200); 
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(200);
+    digitalWrite(LED_BUILTIN, HIGH);
+}
+        </textarea>
+        </div><br><br><br><br>
+        <div style="display: block; margin-left: 3in;">
+          <u><h3>PHP code to write values on database</h3></u><br>
+            <textarea name="text" cols="100" rows="15">              
+              <?php
+              // host = localhost because database hosted on the same server where PHP files are hosted
+              //everything prefixed with $ is a PHP variable
+                  $host = "localhost"; 
+                  $dbname = "meter";    // Database name
+                  $username = "admin";                    // Database username
+                  $password = "root";                        // Database password
+                  // Establish connection to MySQL database, using the inbuilt MySQLi library.
+                  $conn = new mysqli($host, $username, $password, $dbname);
+                  // Check if connection established successfully
+                  if ($conn->connect_error) {
+                      die("Connection failed: " . $conn->connect_error);
+                  } else {
+                      echo "Connected to mysql database. ";
+                  }
+               //$_POST is a PHP Superglobal that assists us to collect/access the data, that arrives in the form of a post request made to this script.
+                // If values sent by NodeMCU are not empty then insert into MySQL database table
+                if(!empty($_POST['sendval']) && !empty($_POST['sendval2']) && !empty($_POST['sendval3']) && !empty($_POST['sendval4'])){
+                      // "sendval" and "sendval2" are query parameters accessed from the HTTP POST Request made by the NodeMCU.
+                          $Vrms = $_POST['sendval'];
+                          $Irms = $_POST['sendval2'];
+                          $poweru = $_POST['sendval3'];
+                          $energy = $_POST['sendval4'];
+                      // Update your tablename here
+                      // A SQL query to insert data into table -> INSERT INTO table_name (col1, col2, ..., colN) VALUES (' " .$col1. " ', '".col2."', ..., ' ".colN." ')
+                              $sql = "INSERT INTO readings (Vrms, Irms, poweru, energy) VALUES ('".$Vrms."','".$Irms."','".$poweru."','".$energy."')";
+                                      if ($conn->query($sql) === TRUE) {
+                                          // If the query returns true, it means it ran successfully
+                                          echo "Values inserted in MySQL database table.";
+                                      } else {
+                                          echo "Error: " . $sql . "<br>" . $conn->error;
+                                      }
+                          }
+                  // Close MySQL connection
+                  $conn->close();
+              ?>
+        </textarea>
+        </div><br><br><br><br>
+        <div style="display: block; margin-left: 3in;">
+          <u><h3>PHP code to read values from database</h3></u><br>
+            <textarea name="text" cols="100" rows="15">              
+<html>
+<head>
+    <title>Meter Dashboard</title>
+    <meta http-equiv="refresh" content="2"> <!-- Refreshes the browser every 1 second -->
+    <!-- All the CSS styling for our Web Page, is inside the style tag below -->
+    <style type="text/css">
+       * {
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: url('https://images.theconversation.com/files/17787/original/tcsj7997-1353301647.jpg?ixlib=rb-1.1.0&q=45&auto=format&w=926&fit=clip') no-repeat center center;
+            background-attachment: fixed;
+            background-size: cover;
+            display: grid;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family:Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+        }
+        .container {
+            box-shadow: 0 0 1rem 0 rgba(0, 0, 0, .2);
+            border-radius: 1rem;
+            position: relative;
+            z-index: 1;
+            background: inherit;
+            overflow: hidden;
+                text-align:center;
+                padding: 5rem;
+            font-size:40px;
+                color: white;
+        }
+        .container:before {
+            content: "";
+            position: absolute;
+            background: inherit;
+            z-index: -1;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            box-shadow: inset 0 0 2000px rgba(255, 255, 255, .5);
+            filter: blur(10px);
+            margin: -20px;
+        }         
+            h1{
+               font-size: 40px;
+            }
+        p{
+            margin: 60px 0 0 0;
+        }
+  </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.2/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+<nav class="navbar navbar-expand-md navbar-light fixed-top" style="background-color: #EAF4F7;">
+          <div class="container-fluid">
+          <a href="index.htm"><img src="logo.png" alt="Logo" style="width:60px; height: 60px; margin-left: 10px;"></a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="collapsibleNavbar">
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                  <a class="nav-link" href="index.htm"><b>Home&nbsp;</b></a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="dbread.php"><b>Dashboard&nbsp;</b></a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="#"><b>About&nbsp;</b></a>
+                </li> 
+                <li class="nav-item">
+                  <a class="nav-link" href="mailto:vikrantsingh.ece19@chitkarauniversity.edu.in"><b>Contact me&nbsp;&nbsp;</b></a>
+                </li> 
+              </ul>
+            </div>
+          </div>
+        </nav><br><br><br>
+    <?php
+        $host = "localhost";  // host = localhost because database hosted on the same server where PHP files are hosted
+        $dbname = "meter";  // Database name
+        $username = "admin";  // Database username
+        $password = "root"; // Database password
+        // Establish connection to MySQL database
+        $conn = new mysqli($host, $username, $password, $dbname);
+        // Check if connection established successfully
+        if ($conn->connect_error) {
+            die("Connection failed: " . $conn->connect_error);
+        }
+        // Query the single latest entry from the database. -> SELECT * FROM table_name ORDER BY col_name DESC LIMIT 1
+        $sql = "SELECT * FROM readings ORDER BY id DESC LIMIT 1";
+        $result = $conn->query($sql);
+        if ($result->num_rows > 0) {
+            //Will come handy if we later want to fetch multiple rows from the table
+            while($row = $result->fetch_assoc()) { //fetch_assoc fetches a row from the result of our query iteratively for every row in our result.
+                //Returning HTML from the server to show on the webpage.
+                echo '<div class="container">';
+                echo '<u><h1>Live Meter Reading</h1></u>';
+                echo '<p>';
+                echo '   <span class="dht-labels">Vrms = </span>';
+                echo '   <span id="Vrms">'.$row["Vrms"].' Volts</span>';
+                echo ' </p>';
+                echo '<p>';
+                echo '   <span class="hum dht-labels">Irms = </span>';
+                echo '   <span id="Irms">'.$row["Irms"].' Amps</span>';
+                echo ' </p>';
+                echo '<p>';
+                echo '   <span class="hum dht-labels">Power = </span>';
+                echo '   <span id="poweru">'.$row["poweru"].' Watts</span>';
+                echo ' </p>';
+                echo '<p>';
+                echo '   <span class="hum dht-labels">Energy Used = </span>';
+                echo '   <span id="energy">'.$row["energy"].' KWh</span>';
+                echo ' </p>';
+                echo '</div>';
+            }
+        } else {
+            echo "0 results";
+        }
+    ?>
+</body>
+</html>
+        </textarea>
+        </div><br><br><br><br>
+    </body>
+</html>

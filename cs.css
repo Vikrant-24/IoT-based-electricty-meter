@@ -1,0 +1,8 @@
+textarea
+{
+    display: flex;
+    justify-content: center;
+    color: azure;
+    background-color: black;
+    align-self: center;
+}
